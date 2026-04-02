@@ -10,7 +10,7 @@ DATA_PATH = "data/india_city_aqi.parquet"
 @st.cache_data
 def get_city_list():
     # Read only City column (very fast)
-    df = ppd.read_parquet(DATA_PATH, usecols=["City"])
+    df = pd.read_parquet(DATA_PATH, usecols=["City"])
     return sorted(df["City"].dropna().unique())
 
 cities = get_city_list()
