@@ -4,13 +4,13 @@ import plotly.express as px
 
 st.title("📊 Air Quality Dataset Explorer")
 
-DATA_PATH = "data/india_city_aqi.csv"
+DATA_PATH = "data/india_city_aqi.parquet"
 
 # ---------------- GET CITY LIST FAST ----------------
 @st.cache_data
 def get_city_list():
     # Read only City column (very fast)
-    df = pd.read_csv(DATA_PATH, usecols=["City"])
+    df = ppd.read_parquet(DATA_PATH, usecols=["City"])
     return sorted(df["City"].dropna().unique())
 
 cities = get_city_list()
@@ -40,7 +40,7 @@ def load_city_data(city):
 
     chunks = []
 
-    for chunk in pd.read_csv(
+    for chunk in pd.read_parquet(
         DATA_PATH,
         usecols=cols,
         parse_dates=["Datetime"],

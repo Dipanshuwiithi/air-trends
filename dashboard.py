@@ -116,7 +116,7 @@ st.markdown("---")
 # ---------------- LOAD DATA ----------------
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/india_city_aqi.csv")
+    df = pd.read_parquet("data/india_city_aqi.parquet")
     df["Datetime"] = pd.to_datetime(df["Datetime"], errors="coerce")
     return df
 
