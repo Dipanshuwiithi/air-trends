@@ -1,125 +1,107 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 
-st.title("📊 Air Quality Dataset Explorer")
+# ---------------- PAGE CONFIG ----------------
+st.set_page_config(page_title="Dataset Explorer", page_icon="📊", layout="wide")
 
+st.title("📊 Dataset Explorer")
+st.markdown("Explore city-wise air quality data interactively.")
+
+# ---------------- DATA PATH ----------------
 DATA_PATH = "data/india_city_aqi.parquet"
 
-# ---------------- GET CITY LIST FAST ----------------
+
+# ---------------- LOAD DATA ----------------
 @st.cache_data
-def get_city_list():
-    # Read only City column (very fast)
-    df = pd.read_parquet(DATA_PATH, usecols=["City"])
-    return sorted(df["City"].dropna().unique())
-
-cities = get_city_list()
-
-# ---------------- SIDEBAR FILTER ----------------
-selected_city = st.sidebar.selectbox(
-    "Select City",
-    ["All Cities"] + cities
-)
-
-
-# ---------------- LOAD FILTERED DATA USING CHUNKS ----------------
-@st.cache_data
-def load_city_data(city):
-
-    cols = [
-        "City",
-        "Datetime",
-        "PM2_5_ugm3",
-        "PM10_ugm3",
-        "NO2_ugm3",
-        "SO2_ugm3",
-        "CO_ugm3",
-        "O3_ugm3",
-        "US_AQI"
-    ]
-
-    chunks = []
-
-    for chunk in pd.read_parquet(
-        DATA_PATH,
-        usecols=cols,
-        parse_dates=["Datetime"],
-        chunksize=50000
-    ):
-
-        if city != "All Cities":
-            chunk = chunk[chunk["City"] == city]
-
-        chunks.append(chunk)
-
-    df = pd.concat(chunks)
-
+def load_data():
+    df = pd.read_parquet(DATA_PATH)
+    df["Datetime"] = pd.to_datetime(df["Datetime"], errors="coerce")
     return df
 
 
-data = load_city_data(selected_city)
+# ---------------- LOAD CITY LIST ONLY ----------------
+@st.cache_data
+def get_city_list():
+    df = pd.read_parquet(DATA_PATH, columns=["City"])
+    return sorted(df["City"].dropna().unique())
 
-# ---------------- SUMMARY METRICS ----------------
-st.subheader("Dataset Overview")
+
+# Load city list
+cities = get_city_list()
+
+
+# ---------------- SIDEBAR FILTER ----------------
+st.sidebar.header("🔎 Filters")
+
+selected_city = st.sidebar.selectbox(
+    "Select City",
+    cities
+)
+
+
+# ---------------- LOAD FILTERED DATA ----------------
+data = load_data()
+
+filtered_data = data[data["City"] == selected_city]
+
+
+# ---------------- DATA OVERVIEW ----------------
+st.subheader(f"📍 Air Quality Data for {selected_city}")
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Rows Loaded", f"{len(data):,}")
-col2.metric("Cities Covered", data["City"].nunique())
-col3.metric("Columns", len(data.columns))
-
-st.markdown("---")
+col1.metric("Total Records", len(filtered_data))
+col2.metric("Start Date", str(filtered_data["Datetime"].min())[:10])
+col3.metric("Latest Date", str(filtered_data["Datetime"].max())[:10])
 
 
-# ---------------- DAILY AGGREGATION ----------------
-daily_avg = (
-    data.set_index("Datetime")
-        .resample("D")
-        .mean(numeric_only=True)
-        .reset_index()
+# ---------------- SHOW DATA TABLE ----------------
+st.subheader("📄 Dataset Preview")
+
+st.dataframe(
+    filtered_data.sort_values("Datetime", ascending=False),
+    use_container_width=True
 )
 
-st.subheader("Daily Aggregated Preview")
 
-st.dataframe(daily_avg.head(500), use_container_width=True)
+# ---------------- COLUMN SELECTOR ----------------
+st.subheader("📊 Explore Specific Pollutants")
 
+numeric_columns = filtered_data.select_dtypes(include="number").columns.tolist()
 
-# ---------------- POLLUTANT DISTRIBUTION ----------------
-st.markdown("---")
-
-pollutant = st.selectbox(
-    "Select Pollutant",
-    [
-        "PM2_5_ugm3",
-        "PM10_ugm3",
-        "NO2_ugm3",
-        "SO2_ugm3",
-        "CO_ugm3",
-        "O3_ugm3",
-        "US_AQI"
-    ]
+selected_column = st.selectbox(
+    "Choose pollutant column",
+    numeric_columns
 )
+
+
+# ---------------- STATISTICS ----------------
+st.subheader("📈 Summary Statistics")
+
+st.write(filtered_data[selected_column].describe())
+
+
+# ---------------- HISTOGRAM ----------------
+import plotly.express as px
 
 fig = px.histogram(
-    daily_avg,
-    x=pollutant,
-    nbins=40,
-    template="plotly_dark"
+    filtered_data,
+    x=selected_column,
+    nbins=50,
+    title=f"Distribution of {selected_column} in {selected_city}"
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
 
-# ---------------- MISSING VALUES ----------------
-st.markdown("---")
-st.subheader("Missing Values Summary")
+# ---------------- DOWNLOAD OPTION ----------------
+st.subheader("⬇️ Download Filtered Data")
 
-st.dataframe(daily_avg.isnull().sum())
+csv = filtered_data.to_csv(index=False).encode("utf-8")
 
-
-# ---------------- DOWNLOAD BUTTON ----------------
 st.download_button(
-    "📥 Download Aggregated Dataset",
-    daily_avg.to_csv(index=False),
-    file_name="aggregated_air_quality.csv"
+    label="Download CSV",
+    data=csv,
+    file_name=f"{selected_city}_aqi_data.csv",
+    mime="text/csv"
 )
